@@ -1,0 +1,39 @@
+services:
+
+  spark:
+    image: apache/spark:3.5.1
+    container_name: trading-spark
+
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
+
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+
+    volumes:
+      - ./spark_jobs:/opt/spark/jobs
+      - ./data:/opt/spark/data
+
+    networks:
+      - trading-network
+
+  mongodb:
+    image: mongo:7
+    container_name: trading-mongodb
+
+    ports:
+      - "27017:27017"
+
+    volumes:
+      - mongo_data:/data/db
+
+    networks:
+      - trading-network
+
+networks:
+  trading-network:
+
+volumes:
+  mongo_data:

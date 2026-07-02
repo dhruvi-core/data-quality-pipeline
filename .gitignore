@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+
+# Virtual Environment
+venv/
+
+# Logs
+logs/
+*.log
+
+# VS Code
+.vscode/
+
+# Spark
+spark-warehouse/
+metastore_db/
+
+# Airflow
+airflow/logs/
+airflow/airflow.db
+
+# Environment Variables
+.env
