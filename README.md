@@ -22,4 +22,4 @@ The pipeline:
 
 ## Author
 
-Dhruvi Dadhaniya
+Dhruvi
