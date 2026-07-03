@@ -1,5 +1,0 @@
-trade_id,instrument,quantity,price,trade_date
-1001,AAPL,100,210.5,2026-07-01
-1003,MSFT,75,350.0,2026-07-01
-1007,AMZN,50,220.0,2026-07-01
-1009,AAPL,10,215.75,2026-07-01

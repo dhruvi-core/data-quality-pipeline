@@ -1,7 +1,7 @@
 services:
 
   spark-master:
-    image: apache/spark:3.5.1
+    build: .
     container_name: spark-master
 
     command: >
@@ -20,7 +20,7 @@ services:
       - trading-network
 
   spark-worker:
-    image: apache/spark:3.5.1
+    build: .
     container_name: spark-worker
 
     command: >
@@ -41,6 +41,8 @@ services:
   mongodb:
     image: mongo:7
     container_name: trading-mongodb
+
+    command: ["mongod","--bind_ip_all"]
 
     ports:
       - "27017:27017"
