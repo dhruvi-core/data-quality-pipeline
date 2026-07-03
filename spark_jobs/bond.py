@@ -8,7 +8,7 @@ spark = SparkSession.builder \
 
 # Read CSV
 df = spark.read.csv(
-    "/opt/spark/data/raw/bond/bond_positions.csv",
+    "/opt/spark/data/raw/bond/bond_trades.csv",
     header=True,
     inferSchema=True
 )

@@ -1,10 +1,12 @@
 services:
 
-  spark:
+  spark-master:
+    image: apache/spark:3.5.1
+    container_name: spark-master
 
-    image: bitnami/spark:3.5
-
-    container_name: trading-spark
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.master.Master
 
     ports:
       - "8080:8080"
@@ -14,12 +16,24 @@ services:
       - ./spark_jobs:/opt/spark/jobs
       - ./data:/opt/spark/data
 
-    command: >
-      /opt/bitnami/spark/bin/spark-class
-      org.apache.spark.deploy.master.Master
+    networks:
+      - trading-network
 
-    environment:
-      SPARK_EXTRA_CLASSPATH: /opt/bitnami/spark/jars/*
+  spark-worker:
+    image: apache/spark:3.5.1
+    container_name: spark-worker
+
+    command: >
+      /opt/spark/bin/spark-class
+      org.apache.spark.deploy.worker.Worker
+      spark://spark-master:7077
+
+    depends_on:
+      - spark-master
+
+    volumes:
+      - ./spark_jobs:/opt/spark/jobs
+      - ./data:/opt/spark/data
 
     networks:
       - trading-network
@@ -32,7 +46,7 @@ services:
       - "27017:27017"
 
     volumes:
-      - mongo_data:/data/db
+      - mongo-data:/data/db
 
     networks:
       - trading-network
@@ -41,4 +55,4 @@ networks:
   trading-network:
 
 volumes:
-  mongo_data:
+  mongo-data:

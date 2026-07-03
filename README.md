@@ -19,7 +19,3 @@ The pipeline:
 - MongoDB
 - Docker
 - Git
-
-## Author
-
-Dhruvi
