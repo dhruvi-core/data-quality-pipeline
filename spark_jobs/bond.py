@@ -17,11 +17,11 @@ df.show(truncate=False)
 
 good_df = df.filter(
     (col("trade_id").isNotNull()) &
-    (col("instrument").isNotNull()) &
-    (col("instrument") != "") &
-    (col("quantity") > 0) &
-    (col("price") > 0) &
-    (col("trade_date").isNotNull())
+    (col("isin").isNotNull()) &
+    (col("isin").rlike("^[A-Z]{2}[A-Z0-9]{10}$")) &
+    (col("maturity_date").isNotNull()) &
+    (col("face_value") > 0) &
+    (col("yield_rate") > 0)
 )
 
 bad_df = df.subtract(good_df)

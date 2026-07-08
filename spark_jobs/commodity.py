@@ -16,12 +16,12 @@ print("\n========== ORIGINAL DATA ==========")
 df.show(truncate=False)
 
 good_df = df.filter(
-    (col("trade_id").isNotNull()) &
-    (col("instrument").isNotNull()) &
-    (col("instrument") != "") &
+    (col("contract_id").isNotNull()) &
+    (col("product_code").isNotNull()) &
+    (col("product_code") != "") &
+    (col("expiry_date").isNotNull()) &
     (col("quantity") > 0) &
-    (col("price") > 0) &
-    (col("trade_date").isNotNull())
+    (col("price") > 0)
 )
 
 bad_df = df.subtract(good_df)
