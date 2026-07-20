@@ -1,5 +1,8 @@
 services:
 
+  # ==========================================
+  # Spark Master
+  # ==========================================
   spark-master:
     build: .
     container_name: spark-master
@@ -19,6 +22,10 @@ services:
     networks:
       - trading-network
 
+
+  # ==========================================
+  # Spark Worker
+  # ==========================================
   spark-worker:
     build: .
     container_name: spark-worker
@@ -38,11 +45,18 @@ services:
     networks:
       - trading-network
 
+
+  # ==========================================
+  # MongoDB
+  # Stores Good and Bad Records
+  # ==========================================
   mongodb:
     image: mongo:7
     container_name: trading-mongodb
 
-    command: ["mongod","--bind_ip_all"]
+    command:
+      - "mongod"
+      - "--bind_ip_all"
 
     ports:
       - "27017:27017"
@@ -53,6 +67,11 @@ services:
     networks:
       - trading-network
 
+
+  # ==========================================
+  # Airflow PostgreSQL
+  # Stores Airflow Metadata
+  # ==========================================
   postgres:
     image: postgres:16
     container_name: airflow-postgres
@@ -71,8 +90,15 @@ services:
     networks:
       - trading-network
 
+
+  # ==========================================
+  # Airflow Webserver
+  # ==========================================
   airflow-webserver:
-    image: apache/airflow:2.10.0
+    build:
+      context: .
+      dockerfile: airflow.Dockerfile
+
     container_name: airflow-webserver
 
     depends_on:
@@ -80,8 +106,14 @@ services:
 
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+
+      AIRFLOW__WEBSERVER__SECRET_KEY: "data-quality-pipeline-secret-key-2026"
 
     ports:
       - "8081:8080"
@@ -97,8 +129,15 @@ services:
     networks:
       - trading-network
 
+
+  # ==========================================
+  # Airflow Scheduler
+  # ==========================================
   airflow-scheduler:
-    image: apache/airflow:2.10.0
+    build:
+      context: .
+      dockerfile: airflow.Dockerfile
+
     container_name: airflow-scheduler
 
     depends_on:
@@ -106,8 +145,14 @@ services:
 
     environment:
       AIRFLOW__CORE__EXECUTOR: LocalExecutor
+
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
+
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+
+      AIRFLOW__API__AUTH_BACKENDS: airflow.api.auth.backend.basic_auth
+
+      AIRFLOW__WEBSERVER__SECRET_KEY: "data-quality-pipeline-secret-key-2026"
 
     volumes:
       - ./dags:/opt/airflow/dags
@@ -120,9 +165,69 @@ services:
     networks:
       - trading-network
 
-networks:
-  trading-network:
 
+  # ==========================================
+  # Rules PostgreSQL
+  # Stores User Validation Rules
+  # ==========================================
+  rules-postgres:
+    image: postgres:16
+    container_name: rules-postgres
+
+    environment:
+      POSTGRES_USER: rules_user
+      POSTGRES_PASSWORD: rules_password
+      POSTGRES_DB: rules_db
+
+    ports:
+      - "5433:5432"
+
+    volumes:
+      - rules-postgres-data:/var/lib/postgresql/data
+
+    networks:
+      - trading-network
+
+
+  # ==========================================
+  # FastAPI Backend
+  # ==========================================
+  backend:
+    build:
+      context: ./backend
+
+    container_name: data-quality-backend
+
+    depends_on:
+      - rules-postgres
+      - mongodb
+
+    ports:
+      - "8000:8000"
+
+    volumes:
+      - ./backend:/app
+
+    networks:
+      - trading-network
+
+
+# ==========================================
+# Docker Network
+# ==========================================
+networks:
+
+  trading-network:
+    driver: bridge
+
+
+# ==========================================
+# Persistent Volumes
+# ==========================================
 volumes:
+
   mongo-data:
+
   postgres-db-volume:
+
+  rules-postgres-data:

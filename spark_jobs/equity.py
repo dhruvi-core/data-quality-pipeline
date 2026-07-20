@@ -1,13 +1,25 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
 from pymongo import MongoClient
 
+from validation_engine import (
+    get_validation_rules,
+    apply_validation_rules
+)
+
+
 # ==========================================
-# Create Spark Session
+# Dataset
+# ==========================================
+DATASET = "equity"
+
+
+# ==========================================
+# Spark Session
 # ==========================================
 spark = SparkSession.builder \
     .appName("Equity Data Quality") \
     .getOrCreate()
+
 
 # ==========================================
 # Read CSV
@@ -18,93 +30,171 @@ df = spark.read.csv(
     inferSchema=True
 )
 
+
 print("\n========== ORIGINAL DATA ==========")
+
 df.show(truncate=False)
 
+
 # ==========================================
-# Good Records
+# Get Rules
 # ==========================================
-good_df = df.filter(
-    (col("trade_id").isNotNull()) &
-    (col("instrument").isNotNull()) &
-    (col("instrument") != "") &
-    (col("quantity") > 0) &
-    (col("price") > 0) &
-    (col("trade_date").isNotNull())
+rules = get_validation_rules(
+    DATASET
 )
 
+
+print("\n========== VALIDATION RULES ==========")
+
+for rule in rules:
+    print(rule)
+
+
 # ==========================================
-# Bad Records
+# Apply Rules
 # ==========================================
-bad_df = df.subtract(good_df)
+good_df, bad_df = apply_validation_rules(
+    df,
+    rules
+)
+
 
 print("\n========== GOOD DATA ==========")
-good_df.show(truncate=False)
+
+good_df.show(
+    truncate=False
+)
+
 
 print("\n========== BAD DATA ==========")
-bad_df.show(truncate=False)
 
-print(f"\nGood Records : {good_df.count()}")
-print(f"Bad Records  : {bad_df.count()}")
+bad_df.show(
+    truncate=False
+)
+
+
+good_count = good_df.count()
+
+bad_count = bad_df.count()
+
+total_count = good_count + bad_count
+
+
+print(
+    f"\nGood Records : {good_count}"
+)
+
+print(
+    f"Bad Records  : {bad_count}"
+)
+
 
 # ==========================================
-# Connect MongoDB
+# MongoDB Connection
 # ==========================================
-client = MongoClient("mongodb://trading-mongodb:27017")
+client = MongoClient(
+    "mongodb://trading-mongodb:27017"
+)
 
 db = client["trading"]
 
-good_collection = db["equity_good"]
-bad_collection = db["equity_bad"]
+good_collection = db[
+    "equity_good"
+]
+
+bad_collection = db[
+    "equity_bad"
+]
+
 
 # ==========================================
-# Convert Spark DataFrame -> Python Dictionary
+# Convert Spark Rows
 # ==========================================
-good_records = []
+def convert_records(dataframe):
 
-for row in good_df.collect():
-    record = {}
+    records = []
 
-    for key, value in row.asDict().items():
-        if value is None:
-            record[key] = None
-        else:
-            record[key] = str(value)
+    for row in dataframe.collect():
 
-    good_records.append(record)
+        record = {}
 
-bad_records = []
+        for key, value in row.asDict().items():
 
-for row in bad_df.collect():
-    record = {}
+            if value is None:
 
-    for key, value in row.asDict().items():
-        if value is None:
-            record[key] = None
-        else:
-            record[key] = str(value)
+                record[key] = None
 
-    bad_records.append(record)
+            elif isinstance(value, list):
 
-print("\nGood records ready for MongoDB :", len(good_records))
-print("Bad records ready for MongoDB  :", len(bad_records))
+                record[key] = [
+                    str(item)
+                    for item in value
+                ]
+
+            else:
+
+                record[key] = str(value)
+
+        records.append(record)
+
+    return records
+
+
+good_records = convert_records(
+    good_df
+)
+
+bad_records = convert_records(
+    bad_df
+)
+
 
 # ==========================================
-# Insert Good Data
+# Clear Previous Results
 # ==========================================
-if len(good_records) > 0:
-    result = good_collection.insert_many(good_records)
-    print(f"Inserted {len(result.inserted_ids)} GOOD records")
+good_collection.delete_many({})
+
+bad_collection.delete_many({})
+
 
 # ==========================================
-# Insert Bad Data
+# Insert Good Records
 # ==========================================
-if len(bad_records) > 0:
-    result = bad_collection.insert_many(bad_records)
-    print(f"Inserted {len(result.inserted_ids)} BAD records")
+if good_records:
+
+    result = good_collection.insert_many(
+        good_records
+    )
+
+    print(
+        f"Inserted "
+        f"{len(result.inserted_ids)} "
+        f"GOOD records"
+    )
+
+
+# ==========================================
+# Insert Bad Records
+# ==========================================
+if bad_records:
+
+    result = bad_collection.insert_many(
+        bad_records
+    )
+
+    print(
+        f"Inserted "
+        f"{len(result.inserted_ids)} "
+        f"BAD records"
+    )
+
 
 client.close()
 
-print("\n========== DATA STORED IN MONGODB ==========")
+
+print(
+    "\n========== DATA STORED IN MONGODB =========="
+)
+
 
 spark.stop()

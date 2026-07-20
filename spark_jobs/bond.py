@@ -1,80 +1,148 @@
 from pyspark.sql import SparkSession
-from pyspark.sql.functions import col
 from pymongo import MongoClient
+
+from validation_engine import (
+    get_validation_rules,
+    apply_validation_rules
+)
+
+
+DATASET = "bond"
+
 
 spark = SparkSession.builder \
     .appName("Bond Data Quality") \
     .getOrCreate()
 
+
+# Read Bond CSV
 df = spark.read.csv(
     "/opt/spark/data/raw/bond/bond_trades.csv",
     header=True,
     inferSchema=True
 )
 
-print("\n========== ORIGINAL DATA ==========")
+
+print("\n========== ORIGINAL BOND DATA ==========")
 df.show(truncate=False)
 
-good_df = df.filter(
-    (col("trade_id").isNotNull()) &
-    (col("isin").isNotNull()) &
-    (col("isin").rlike("^[A-Z]{2}[A-Z0-9]{10}$")) &
-    (col("maturity_date").isNotNull()) &
-    (col("face_value") > 0) &
-    (col("yield_rate") > 0)
+
+# Get dynamic validation rules from PostgreSQL
+rules = get_validation_rules(DATASET)
+
+
+print("\n========== BOND VALIDATION RULES ==========")
+
+for rule in rules:
+    print(rule)
+
+
+# Apply validation rules
+good_df, bad_df = apply_validation_rules(
+    df,
+    rules
 )
 
-bad_df = df.subtract(good_df)
 
-print("\n========== GOOD DATA ==========")
+print("\n========== GOOD BOND DATA ==========")
 good_df.show(truncate=False)
 
-print("\n========== BAD DATA ==========")
+
+print("\n========== BAD BOND DATA ==========")
 bad_df.show(truncate=False)
 
-print(f"\nGood Records : {good_df.count()}")
-print(f"Bad Records  : {bad_df.count()}")
 
-client = MongoClient("mongodb://trading-mongodb:27017")
+# Count records
+good_count = good_df.count()
+bad_count = bad_df.count()
+total_count = good_count + bad_count
+
+
+print(f"\nTotal Records : {total_count}")
+print(f"Good Records  : {good_count}")
+print(f"Bad Records   : {bad_count}")
+
+
+# MongoDB connection
+client = MongoClient(
+    "mongodb://trading-mongodb:27017"
+)
 
 db = client["trading"]
 
 good_collection = db["bond_good"]
 bad_collection = db["bond_bad"]
 
-good_records = []
 
-for row in good_df.collect():
-    record = {}
+# Convert Spark DataFrame rows to MongoDB records
+def convert_records(dataframe):
 
-    for key, value in row.asDict().items():
-        record[key] = None if value is None else str(value)
+    records = []
 
-    good_records.append(record)
+    for row in dataframe.collect():
 
-bad_records = []
+        record = {}
 
-for row in bad_df.collect():
-    record = {}
+        for key, value in row.asDict().items():
 
-    for key, value in row.asDict().items():
-        record[key] = None if value is None else str(value)
+            if value is None:
+                record[key] = None
 
-    bad_records.append(record)
+            elif isinstance(value, list):
+                record[key] = [
+                    str(item)
+                    for item in value
+                ]
 
-print("\nGood records ready :", len(good_records))
-print("Bad records ready  :", len(bad_records))
+            else:
+                record[key] = str(value)
 
+        records.append(record)
+
+    return records
+
+
+good_records = convert_records(good_df)
+bad_records = convert_records(bad_df)
+
+
+# Remove results from previous pipeline run
+good_collection.delete_many({})
+bad_collection.delete_many({})
+
+
+# Store good records
 if good_records:
-    result = good_collection.insert_many(good_records)
-    print(f"Inserted {len(result.inserted_ids)} GOOD records")
 
+    result = good_collection.insert_many(
+        good_records
+    )
+
+    print(
+        f"Inserted {len(result.inserted_ids)} "
+        f"GOOD Bond records"
+    )
+
+
+# Store bad records with failure reasons
 if bad_records:
-    result = bad_collection.insert_many(bad_records)
-    print(f"Inserted {len(result.inserted_ids)} BAD records")
+
+    result = bad_collection.insert_many(
+        bad_records
+    )
+
+    print(
+        f"Inserted {len(result.inserted_ids)} "
+        f"BAD Bond records"
+    )
+
 
 client.close()
 
-print("\n========== DATA STORED IN MONGODB ==========")
+
+print(
+    "\n========== BOND DATA STORED IN MONGODB =========="
+)
+
 
 spark.stop()
